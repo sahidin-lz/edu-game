@@ -1,19 +1,9 @@
-export interface Scenario {
-  ayat_arab?: string;
-  ayat_terjemahan?: string;
-  id: number;
-  kategori: "Main Quest" | "Side Quest";
-  lokasi: string;
-  judul_konflik: string;
-  deskripsi: string;
-  kd_sosiologi: string;
-  ayat_rujukan: string;
-  tipe_tantangan: "teks_esai" | "suara_orasi";
-  status: "locked" | "available" | "completed";
-  reward_qris: number;
-  cost_energi: number;
-}
+import fs from 'fs';
 
+let content = fs.readFileSync('src/data/scenarioData.ts', 'utf-8');
+
+// We will recreate the scenarioBank completely to ensure it's clean and matches the request.
+const newScenarios = `
 export const scenarioBank: Scenario[] = [
   {
     id: 1,
@@ -76,3 +66,7 @@ export const scenarioBank: Scenario[] = [
     cost_energi: 20
   }
 ];
+`;
+
+content = content.replace(/export const scenarioBank: Scenario\[\] = \[[\s\S]*\];/, newScenarios.trim());
+fs.writeFileSync('src/data/scenarioData.ts', content);

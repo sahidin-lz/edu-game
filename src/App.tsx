@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BookOpen, MapIcon } from 'lucide-react';
 // IMPORT BARU KITA
 import { TopHUD } from './components/TopHUD';
-import { BottomDock } from './components/BottomDock';
+import { SideNav } from './components/SideNav';
 
 import { StoryLogView } from './components/StoryLogView';
 import { ActionInput } from './components/ActionInput';
@@ -199,9 +199,17 @@ export default function App() {
     return () => ws.close();
   }, [user]);
 
-  const saveToFirebase = async (newState: GameState, newLogs: StoryLog[]) => {
+  const saveToFirebase = (newState: GameState, newLogs: StoryLog[]) => {
     if (!user) return;
-    try { await setDoc(doc(db, 'saves', user.uid), { uid: user.uid, displayName: user.displayName || user.email?.split('@')[0] || "Anonim", email: user.email, gameState: newState, logs: newLogs, lastUpdated: serverTimestamp() }, { merge: true }); } catch (error) {}
+    // Optimistic UI Update: Jalankan setDoc di background tanpa memblokir thread
+    setDoc(doc(db, 'saves', user.uid), { 
+      uid: user.uid, 
+      displayName: user.displayName || user.email?.split('@')[0] || "Anonim", 
+      email: user.email, 
+      gameState: newState, 
+      logs: newLogs, 
+      lastUpdated: serverTimestamp() 
+    }, { merge: true }).catch(console.error);
   };
 
   const handleResetData = async () => {
@@ -378,7 +386,7 @@ export default function App() {
         <div className="flex-1 relative flex flex-col pt-20 overflow-hidden">
           
           {/* 2. AREA TENGAH (SCROLLABLE LOGS) */}
-          <div className="flex-1 overflow-y-auto pb-48 relative">
+          <div className="flex-1 overflow-y-auto pb-[50vh] relative">
             <StoryLogView logs={logs} loading={loading} />
             {gameState.status_kota === 'Tamat' && (
               <CertificateView user={user} userProfile={userProfile} gameState={gameState} onReset={handleResetData} />
@@ -390,14 +398,12 @@ export default function App() {
             
             {/* Navigasi Melayang (Selalu bisa diakses asalkan belum tamat) */}
             {gameState.status_kota !== 'Tamat' && (
-              <div className="mb-4">
-                <BottomDock 
+              <SideNav 
                   onOpenMap={() => setIsSideQuestsOpen(true)}
                   onOpenInventory={() => setIsDashboardOpen(true)}
                   onOpenTahfidz={() => setIsTahfidzOpen(true)}
                   onOpenChat={() => setIsChatOpen(true)}
                 />
-              </div>
             )}
 
             {/* Jika sedang IDLE (Aman): Tampilkan Menu Transit */}
@@ -419,22 +425,40 @@ export default function App() {
 
             {/* Jika sedang KRISIS (Waspada): Tampilkan Form Input (Esai/Suara) */}
             {!isIdle && gameState.status_kota !== 'Tamat' && (
-              <div className="bg-slate-900/95 backdrop-blur-md border-t border-slate-800 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] pointer-events-auto">
-                {activeQuest && activeQuest.ayat_arab && (
-                  <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between bg-slate-950">
-                    <p className="text-xs text-slate-400">Referensi: <strong>{activeQuest.ayat_rujukan}</strong></p>
-                    <button onClick={() => setShowAyatHint(!showAyatHint)} className="text-[10px] uppercase text-indigo-400 font-bold hover:text-indigo-300">
-                      {showAyatHint ? 'Sembunyikan' : 'Lihat Ayat'}
-                    </button>
-                  </div>
-                )}
-                {showAyatHint && activeQuest?.ayat_arab && (
-                  <div className="p-4 bg-slate-900 border-b border-slate-800 animate-in fade-in slide-in-from-bottom-2">
-                    <p className="text-right font-arabic text-xl leading-loose text-emerald-300" dir="rtl">{activeQuest.ayat_arab}</p>
-                    <p className="text-[10px] italic text-slate-400 mt-2">"{activeQuest.ayat_terjemahan}"</p>
-                  </div>
-                )}
-                <ActionInput onActionSubmit={handleActionSubmit} disabled={loading} locationContext={gameState.locationContext} />
+              <div className="bg-slate-900/95 backdrop-blur-md border-t border-slate-800 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] pointer-events-auto flex flex-col max-h-[85vh]">
+                
+                <div className="overflow-y-auto flex-shrink scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                  {/* HOLOGRAM BRIEFING CARD */}
+                  {activeQuest && (
+                    <div className="p-4 pr-20 md:pr-28 bg-slate-900/80 border-l-4 border-amber-500 shadow-lg relative z-10 backdrop-blur-xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest bg-amber-500/10 px-2 py-1 rounded">Kategori Misi: {activeQuest.kategori}</span>
+                      </div>
+                      <h3 className="text-sm font-bold text-white mb-1">{activeQuest.judul_konflik}</h3>
+                      <p className="text-xs text-slate-300 leading-relaxed">{activeQuest.deskripsi}</p>
+                    </div>
+                  )}
+
+                  {activeQuest && activeQuest.ayat_arab && (
+                    <div className="px-4 pr-20 md:pr-28 py-2 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+                      <p className="text-xs text-slate-400">Referensi: <strong>{activeQuest.ayat_rujukan}</strong></p>
+                      <button onClick={() => setShowAyatHint(!showAyatHint)} className="text-[10px] uppercase text-indigo-400 font-bold hover:text-indigo-300">
+                        {showAyatHint ? 'Sembunyikan' : 'Lihat Ayat'}
+                      </button>
+                    </div>
+                  )}
+                  
+                  {showAyatHint && activeQuest?.ayat_arab && (
+                    <div className="p-6 pb-8 pr-20 md:pr-28 bg-gradient-to-br from-emerald-950 to-slate-900 border-b border-emerald-900/50 shadow-[0_0_30px_rgba(16,185,129,0.2)] animate-in fade-in slide-in-from-bottom-2 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl"></div>
+                      <p className="text-right font-arabic text-3xl leading-[2.5] text-emerald-300 font-bold drop-shadow-[0_0_15px_rgba(16,185,129,0.5)] relative z-10" dir="rtl">{activeQuest.ayat_arab}</p>
+                      <p className="text-xs italic text-emerald-100/70 mt-4 relative z-10 border-t border-emerald-900/30 pt-3">"{activeQuest.ayat_terjemahan}"</p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex-shrink-0">
+                  <ActionInput onActionSubmit={handleActionSubmit} disabled={loading} locationContext={gameState.locationContext} />
+                </div>
               </div>
             )}
           </div>

@@ -257,40 +257,7 @@ Tugas Anda:
   }
 });
 
-app.post("/api/music", async (req, res) => {
-  try {
-    const { prompt } = req.body;
-    
-    // Set headers for SSE streaming
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    
-    const response = await fetchWithRetry(() => 
-      ai.models.generateContentStream({
-        model: "lyria-3-clip-preview",
-        contents: `Generate a 30-second cinematic, atmospheric RPG soundtrack for the following context: ${prompt}`,
-      })
-    );
 
-    for await (const chunk of response) {
-      const parts = chunk.candidates?.[0]?.content?.parts;
-      if (!parts) continue;
-      
-      for (const part of parts) {
-        if (part.inlineData?.data) {
-          res.write(`data: ${JSON.stringify({ audio: part.inlineData.data, mimeType: part.inlineData.mimeType })}\n\n`);
-        }
-      }
-    }
-    res.write(`data: [DONE]\n\n`);
-    res.end();
-  } catch (error: any) {
-    console.error("Error generating music:", error);
-    res.write(`data: ${JSON.stringify({ error: error?.message || String(error) })}\n\n`);
-    res.end();
-  }
-});
 
 app.post("/api/grounding", async (req, res) => {
   try {

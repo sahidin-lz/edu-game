@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Send, Type, Loader2, BookOpen, AlertTriangle, Sparkles } from 'lucide-react';
-import { MusicGenerator } from './MusicGenerator';
 
 interface Props {
   onActionSubmit: (action: string, type: 'teks_esai' | 'suara_orasi') => void;
@@ -92,7 +91,7 @@ export function ActionInput({ onActionSubmit, disabled, locationContext }: Props
   };
 
   return (
-    <div className="w-full relative z-10 flex flex-col gap-3 p-4 bg-slate-950 border-t border-slate-800 shadow-[0_-10px_30px_rgba(0,0,0,0.8)]">
+    <div className="w-full relative z-10 flex flex-col gap-3 p-4 pr-20 md:pr-28 bg-slate-950 border-t border-slate-800 shadow-[0_-10px_30px_rgba(0,0,0,0.8)]">
       
       {/* TOOLBAR ATAS (Mode & Lentera AI) */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 max-w-5xl mx-auto w-full">
@@ -116,9 +115,7 @@ export function ActionInput({ onActionSubmit, disabled, locationContext }: Props
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="w-48 hidden md:block">
-            <MusicGenerator context={locationContext || 'A tense situation'} />
-          </div>
+          
           
           {/* LENTERA AI BUTTON */}
           <button

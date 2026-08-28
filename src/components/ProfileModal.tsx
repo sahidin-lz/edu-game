@@ -1,7 +1,8 @@
 import React from 'react';
-import { X, ShieldAlert, GraduationCap, User, LogOut, Map, History } from 'lucide-react';
+import { X, ShieldAlert, GraduationCap, User, LogOut, Map, History, Target } from 'lucide-react';
 import { StoryLog, GameState } from '../types';
 import { auth } from '../lib/firebase';
+import { getAkademikPersona } from '../utils/persona';
 
 interface Props {
   isOpen: boolean;
@@ -40,6 +41,8 @@ export function ProfileModal({ isOpen, onClose, logs, user, userProfile, gameSta
 
   const reversedDilemmas = [...dilemmas].reverse();
   const name = userProfile?.displayName || user?.email?.split('@')[0] || "Anonim";
+  
+  const persona = getAkademikPersona(gameState.faham, gameState.hifdz, gameState.ukhuwah);
 
   return (
     <>
@@ -55,12 +58,12 @@ export function ProfileModal({ isOpen, onClose, logs, user, userProfile, gameSta
       >
         <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-800 bg-slate-950/50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-800 border-2 border-emerald-500 flex items-center justify-center">
-              {user?.photoURL ? (
-                <img src={user.photoURL} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-              ) : (
-                <User size={20} className="text-slate-400" />
-              )}
+            <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-800 border-2 border-emerald-500 flex items-center justify-center shrink-0">
+              <img 
+                src={gameState.avatarId ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${gameState.avatarId}` : `https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile?.email}`} 
+                alt="Avatar" 
+                className="w-full h-full object-cover" 
+              />
             </div>
             <div>
               <h2 className="font-bold text-sm tracking-widest uppercase text-emerald-400">{name}</h2>
@@ -76,6 +79,50 @@ export function ProfileModal({ isOpen, onClose, logs, user, userProfile, gameSta
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          
+          {/* PROFIL AKADEMIK / PERSONA */}
+          <div className="bg-slate-950/80 border border-slate-700 rounded-xl p-5 mb-8 shadow-inner">
+            <h3 className="text-[10px] uppercase font-bold tracking-widest text-slate-500 flex items-center gap-2 mb-4">
+              <Target size={12} className="text-amber-400" /> Profil Akademik
+            </h3>
+            <div className="text-center mb-6">
+              <h1 className={`text-2xl font-black uppercase tracking-widest ${persona.color} mb-2`}>{persona.title}</h1>
+              <p className="text-xs text-slate-400 italic leading-relaxed">"{persona.desc}"</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1.5">
+                  <span>Sosiologi (Faham)</span>
+                  <span className="text-blue-400">{gameState.faham}/100</span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-2">
+                  <div className="bg-blue-400 h-2 rounded-full" style={{ width: `${Math.min(100, gameState.faham)}%` }}></div>
+                </div>
+              </div>
+              
+              <div>
+                <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1.5">
+                  <span>Agama (Hifdz)</span>
+                  <span className="text-emerald-400">{gameState.hifdz}/100</span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-2">
+                  <div className="bg-emerald-400 h-2 rounded-full" style={{ width: `${Math.min(100, gameState.hifdz)}%` }}></div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-1.5">
+                  <span>Sosial (Ukhuwah)</span>
+                  <span className="text-indigo-400">{gameState.ukhuwah}/100</span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-2">
+                  <div className="bg-indigo-400 h-2 rounded-full" style={{ width: `${Math.min(100, gameState.ukhuwah)}%` }}></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xs uppercase font-bold tracking-widest text-slate-300 flex items-center gap-2">
               <History size={14} className="text-amber-400" /> Jejak Perjalanan
