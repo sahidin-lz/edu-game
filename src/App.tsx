@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen } from 'lucide-react';
-import { StatusBar } from './components/StatusBar';
+import { BookOpen, MapIcon } from 'lucide-react';
+// IMPORT BARU KITA
+import { TopHUD } from './components/TopHUD';
+import { BottomDock } from './components/BottomDock';
+
 import { StoryLogView } from './components/StoryLogView';
 import { ActionInput } from './components/ActionInput';
 import { ProfileModal } from './components/ProfileModal';
@@ -13,14 +16,13 @@ import { audioEngine } from './lib/audio';
 import { auth, db } from './lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
-
 import { scenarioBank } from './data/scenarioData';
-
 import { ChatWidget } from './components/ChatWidget';
-
 import { MiniGameTahfidz } from './components/MiniGameTahfidz';
-
 import { LandingPage } from './components/LandingPage';
+import { AvatarSelection } from './components/AvatarSelection';
+import { WelcomePopup } from './components/WelcomePopup';
+import { MissionResultPopup } from './components/MissionResultPopup';
 
 const INITIAL_STATE: GameState = {
   energi: 100,
@@ -32,40 +34,24 @@ const INITIAL_STATE: GameState = {
   ketegangan_sosial: 40,
   locationContext: `Basecamp Kafilah - Bersiap untuk perjalanan.`,
   status_kota: "Aman",
-  equipment: {
-    alasKaki: null,
-    pakaian: null
-  },
+  equipment: { alasKaki: null, pakaian: null },
   currentScenarioIndex: 0,
   quests: scenarioBank
 };
 
 const getAppBackgroundClass = (status: string) => {
   switch (status) {
-    case 'Aman':
-    case 'Harmonis':
-      return 'bg-emerald-950';
-    case 'Kacau':
-      return 'bg-orange-950';
-    case 'Kritis':
-      return 'bg-red-950';
-    case 'Tamat':
-      return 'bg-indigo-950';
-    case 'Waspada':
-    default:
-      return 'bg-slate-950';
+    case 'Aman': case 'Harmonis': return 'bg-emerald-950';
+    case 'Kacau': return 'bg-orange-950';
+    case 'Kritis': return 'bg-red-950';
+    case 'Tamat': return 'bg-indigo-950';
+    case 'Waspada': default: return 'bg-slate-950';
   }
 };
 
 export default function App() {
   const [gameState, setGameState] = useState<GameState>(INITIAL_STATE);
-  const [logs, setLogs] = useState<StoryLog[]>([
-    {
-      id: '1',
-      type: 'narrative',
-      content: INITIAL_STATE.locationContext,
-    }
-  ]);
+  const [logs, setLogs] = useState<StoryLog[]>([{ id: '1', type: 'narrative', content: INITIAL_STATE.locationContext }]);
   const [loading, setLoading] = useState(false);
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
@@ -74,8 +60,28 @@ export default function App() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [animationClass, setAnimationClass] = useState('');
   const [user, setUser] = useState<User | null>(null);
-
   const [isTahfidzOpen, setIsTahfidzOpen] = useState(false);
+  const [showAyatHint, setShowAyatHint] = useState(false);
+  const [showAvatarSelection, setShowAvatarSelection] = useState(false);
+  const [showWelcomePopup, setShowWelcomePopup] = useState(false);
+  const [missionResult, setMissionResult] = useState<EvaluationResult | null>(null);
+  const [saranIlahi, setSaranIlahi] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
+  const handleSelectAvatar = (avatarId: string) => {
+    setGameState(prev => {
+      const newState = { ...prev, avatarId, playerName: userProfile?.displayName || "Siswa" };
+      saveToFirebase(newState, logs);
+      return newState;
+    });
+    setShowAvatarSelection(false);
+    setShowWelcomePopup(true);
+  };
+
+  const handleCloseWelcome = () => {
+    setShowWelcomePopup(false);
+    if (userProfile?.role === 'STUDENT') setIsSideQuestsOpen(true);
+  };
 
   const handleEquip = (type: 'alasKaki' | 'pakaian', itemId: string) => {
     import('./data/items').then(({ INVENTORY_ITEMS }) => {
@@ -83,14 +89,12 @@ export default function App() {
       if (item) {
         setGameState(prev => {
           const newState = { ...prev, equipment: { ...prev.equipment, [type]: itemId } };
-          // Apply effects
           if (item.effect.maxEnergi) {
             newState.maxEnergi = (newState.maxEnergi || 100) + item.effect.maxEnergi;
             newState.energi = Math.min(newState.energi + item.effect.maxEnergi, newState.maxEnergi);
           }
           if (item.effect.ukhuwah) newState.ukhuwah = Math.min(100, newState.ukhuwah + item.effect.ukhuwah);
           if (item.effect.faham) newState.faham = Math.min(100, newState.faham + item.effect.faham);
-          
           saveToFirebase(newState, logs);
           return newState;
         });
@@ -116,143 +120,58 @@ export default function App() {
     });
   };
 
-  const handleCompleteVPS = () => {
-    setGameState(prev => {
-      const newState = {
-        ...prev,
-        faham: Math.min(100, prev.faham + 50),
-        energi: Math.max(0, prev.energi - 20)
-      };
-      
-      const newLog = {
-        id: Date.now().toString(),
-        type: 'narrative' as const,
-        content: "Infrastruktur digital desa berhasil dibangun! Server CBT kini aktif."
-      };
-      const newLogs = [...logs, newLog];
-      setLogs(newLogs);
-      
-      saveToFirebase(newState, newLogs);
-      return newState;
-    });
-  };
-
-  const handleCompleteDakwah = () => {
-    setGameState(prev => {
-      const newState = {
-        ...prev,
-        uang_qris: prev.uang_qris + 50000,
-        ukhuwah: Math.min(100, prev.ukhuwah + 10)
-      };
-      saveToFirebase(newState, logs);
-      return newState;
-    });
-  };
-
   const handleCompleteTahfidz = (bonusHifdz: number, costEnergi: number) => {
     setGameState(prev => {
-      const newState = {
-        ...prev,
-        hifdz: Math.min(100, prev.hifdz + bonusHifdz),
-        energi: Math.max(0, prev.energi - costEnergi)
-      };
-      
-      const newLog: StoryLog = {
-        id: Date.now().toString(),
-        type: 'narrative',
-        content: `Berhasil menyelesaikan Murojaah (Susun Ayat). Mendapat bonus Hifdz +${bonusHifdz}.`
-      };
+      const newState = { ...prev, hifdz: Math.min(100, prev.hifdz + bonusHifdz), energi: Math.max(0, prev.energi - costEnergi) };
+      const newLog: StoryLog = { id: Date.now().toString(), type: 'narrative', content: `Berhasil menyelesaikan Murojaah. Mendapat bonus Hifdz +${bonusHifdz}.` };
       const newLogs = [...logs, newLog];
       setLogs(newLogs);
-      
       saveToFirebase(newState, newLogs);
       return newState;
     });
   };
-
-  const [saranIlahi, setSaranIlahi] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState<any>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        // Logika RBAC (Role-Based Access Control)
         let role = 'STUDENT';
         try {
           if (currentUser.email) {
             const adminDoc = await getDoc(doc(db, "admins", currentUser.email));
-            if (adminDoc.exists()) {
-              role = 'ADMIN';
-            }
+            if (adminDoc.exists()) role = 'ADMIN';
           }
-        } catch (e) {
-          console.error("Failed to check admin status", e);
-        }
+        } catch (e) { console.error(e); }
         
-        const profile = {
-          uid: currentUser.uid,
-          displayName: currentUser.displayName,
-          email: currentUser.email,
-          photoURL: currentUser.photoURL,
-          role: role,
-          lastActiveAt: serverTimestamp()
-        };
+        const profile = { uid: currentUser.uid, displayName: currentUser.displayName, email: currentUser.email, photoURL: currentUser.photoURL, role: role, lastActiveAt: serverTimestamp() };
         setUserProfile(profile);
+        if (role === 'ADMIN') setIsDashboardGuruOpen(true);
 
-        // Jika ADMIN, paksa buka Dashboard Guru dan tutup layar lain
-        if (role === 'ADMIN') {
-          setIsDashboardGuruOpen(true);
-        }
-
-        // Load save data
         try {
           const docRef = doc(db, 'saves', currentUser.uid);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data();
-            if (data.gameState) setGameState(data.gameState as GameState);
+            if (data.gameState) {
+              setGameState(data.gameState as GameState);
+              if (!(data.gameState as GameState).avatarId && role === 'STUDENT') setShowAvatarSelection(true);
+              else if (role === 'STUDENT') setShowWelcomePopup(true);
+            }
             if (data.logs) setLogs(data.logs as StoryLog[]);
-            
-            // Auto-open map for students so they don't jump straight into answering
-            if (role === 'STUDENT') {
-              setIsSideQuestsOpen(true);
-            }
           } else {
-            // Create initial save
-            await setDoc(docRef, {
-              uid: currentUser.uid,
-              displayName: currentUser.displayName || currentUser.email?.split('@')[0] || "Anonim",
-              email: currentUser.email,
-              createdAt: serverTimestamp(),
-              lastUpdated: serverTimestamp(),
-              gameState: INITIAL_STATE,
-              logs: logs
-            });
-            // Auto-open map for new students too
-            if (role === 'STUDENT') {
-              setIsSideQuestsOpen(true);
-            }
+            await setDoc(docRef, { uid: currentUser.uid, displayName: currentUser.displayName || currentUser.email?.split('@')[0] || "Anonim", email: currentUser.email, createdAt: serverTimestamp(), lastUpdated: serverTimestamp(), gameState: INITIAL_STATE, logs: logs });
+            if (role === 'STUDENT') setShowAvatarSelection(true);
           }
-        } catch (error) {
-          console.error("Error loading save:", error);
-        }
-
-        try {
-          // Sinkronisasi data pengguna ke tabel "users"
-          await setDoc(doc(db, 'users', currentUser.uid), profile, { merge: true });
-        } catch (error) {
-          console.error("Error saving user profile:", error);
-        }
+        } catch (error) { console.error(error); }
+        
+        try { await setDoc(doc(db, 'users', currentUser.uid), profile, { merge: true }); } catch (error) {}
       } else {
-        // Reset state on logout
         setUserProfile(null);
         setGameState(INITIAL_STATE);
         setLogs([{ id: '1', type: 'narrative', content: INITIAL_STATE.locationContext }]);
         setIsDashboardGuruOpen(false);
       }
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -261,12 +180,10 @@ export default function App() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/p2p`;
     const ws = new WebSocket(wsUrl);
-    
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'saran-ilahi') {
-          // target is 'all' or specific student's name/email. Since we don't have perfect name matching, we check substring or 'all'
           const userName = user.displayName || user.email?.split('@')[0] || '';
           if (data.target === 'all' || userName.toLowerCase().includes(data.target.toLowerCase()) || data.target.toLowerCase().includes(userName.toLowerCase())) {
             setSaranIlahi(data.text);
@@ -274,137 +191,63 @@ export default function App() {
         }
       } catch(e) {}
     };
-    
     return () => ws.close();
   }, [user]);
 
   const saveToFirebase = async (newState: GameState, newLogs: StoryLog[]) => {
     if (!user) return;
-    try {
-      await setDoc(doc(db, 'saves', user.uid), {
-        uid: user.uid,
-        displayName: user.displayName || user.email?.split('@')[0] || "Anonim",
-        email: user.email,
-        gameState: newState,
-        logs: newLogs,
-        lastUpdated: serverTimestamp()
-      }, { merge: true });
-    } catch (error) {
-      console.error("Error saving game:", error);
-    }
+    try { await setDoc(doc(db, 'saves', user.uid), { uid: user.uid, displayName: user.displayName || user.email?.split('@')[0] || "Anonim", email: user.email, gameState: newState, logs: newLogs, lastUpdated: serverTimestamp() }, { merge: true }); } catch (error) {}
   };
 
   const handleResetData = async () => {
     if (!user) return;
     if (window.confirm("Apakah Anda yakin ingin menghapus semua progres game Anda dan mengulang dari awal?")) {
-      try {
-        await deleteDoc(doc(db, 'saves', user.uid));
-        await deleteDoc(doc(db, 'users', user.uid));
-        window.location.reload();
-      } catch (error) {
-        console.error("Error resetting data:", error);
-        alert("Gagal menghapus data. Pastikan koneksi internet lancar.");
-      }
+      try { await deleteDoc(doc(db, 'saves', user.uid)); await deleteDoc(doc(db, 'users', user.uid)); window.location.reload(); } catch (error) { alert("Gagal menghapus data."); }
     }
   };
 
   const handleActionSubmit = async (actionText: string, inputType: 'teks_esai' | 'suara_orasi') => {
-    // Initialize audio on user interaction
     audioEngine.init();
-
-    // Add user action to log
-    const actionLog: StoryLog = {
-      id: Date.now().toString() + '-action',
-      type: 'player_action',
-      content: actionText,
-      inputType,
-    };
-    
+    const actionLog: StoryLog = { id: Date.now().toString() + '-action', type: 'player_action', content: actionText, inputType };
     const newLogsWithAction = [...logs, actionLog];
     setLogs(newLogsWithAction);
     setLoading(true);
 
     try {
-      const response = await fetch('/api/action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          state: gameState,
-          action: actionText,
-          inputType,
-        })
-      });
-
-      if (!response.ok) {
-        let errorMsg = 'Gagal mendapatkan respon dari Dosen Kehidupan.';
-        try {
-          const errorData = await response.json();
-          if (errorData.details && errorData.details.includes('503')) {
-             errorMsg = 'Server AI Dosen Kehidupan sedang sangat sibuk karena permintaan tinggi. Mohon tunggu beberapa detik dan coba lagi.';
-          } else if (errorData.details) {
-             errorMsg = `Gagal: ${errorData.details}`;
-          }
-        } catch(e) {}
-        throw new Error(errorMsg);
-      }
-
+      const response = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: gameState, action: actionText, inputType }) });
+      if (!response.ok) throw new Error('Gagal mendapatkan respon dari Dosen Kehidupan.');
       const result: EvaluationResult = await response.json();
 
-      // Broadcast game action to WebSocket for Guru Dashboard
       if (user) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws/p2p`;
-        const ws = new WebSocket(wsUrl);
+        const ws = new WebSocket(`${protocol}//${window.location.host}/ws/p2p`);
         ws.onopen = () => {
-          ws.send(JSON.stringify({
-            type: 'game-action',
-            id: Date.now().toString(),
-            waktu: new Date().toLocaleTimeString(),
-            nama: user.email?.split('@')[0] || 'Siswa',
-            aksi: `Mengirim aksi: "${actionText}"`,
-            skor_ai: result.perubahan_status.ketegangan_sosial_kota < 0 ? '+90' : '-30',
-            time: Date.now(),
-            text: `Siswa "${user.email?.split('@')[0]}" mengirim keputusan: ${actionText}`
-          }));
+          ws.send(JSON.stringify({ type: 'game-action', id: Date.now().toString(), waktu: new Date().toLocaleTimeString(), nama: user.email?.split('@')[0] || 'Siswa', aksi: `Mengirim aksi: "${actionText}"`, skor_ai: result.perubahan_status.ketegangan_sosial_kota < 0 ? '+90' : '-30', time: Date.now(), text: `Siswa "${user.email?.split('@')[0]}" mengirim keputusan: ${actionText}` }));
           setTimeout(() => ws.close(), 1000);
         };
       }
 
-      // Play audio feedback based on outcome
       if (result.perubahan_status.ketegangan_sosial_kota > 0 || result.perubahan_status.ukhuwah < 0) {
         audioEngine.playNegative();
-        if (result.perubahan_status.ketegangan_sosial_kota > 0) {
-          setAnimationClass('animate-shake animate-flash-red');
-          setTimeout(() => setAnimationClass(''), 600);
-        }
+        if (result.perubahan_status.ketegangan_sosial_kota > 0) { setAnimationClass('animate-shake animate-flash-red'); setTimeout(() => setAnimationClass(''), 600); }
       } else {
         audioEngine.playPositive();
-        if (result.perubahan_status.ketegangan_sosial_kota < 0) {
-          setAnimationClass('animate-flash-green');
-          setTimeout(() => setAnimationClass(''), 600);
-        }
+        if (result.perubahan_status.ketegangan_sosial_kota < 0) { setAnimationClass('animate-flash-green'); setTimeout(() => setAnimationClass(''), 600); }
       }
 
-      // Update state
       let updatedQuests = [...gameState.quests];
       let rewardQris = 0;
-      
       if (result.status_kota === 'Aman' || result.status_kota === 'Harmonis') {
         const currentQuest = updatedQuests[gameState.currentScenarioIndex];
         if (currentQuest) {
           updatedQuests[gameState.currentScenarioIndex] = { ...currentQuest, status: 'completed' };
           rewardQris = currentQuest.reward_qris || 0;
           if (currentQuest.kategori === 'Main Quest') {
-            // Unlock next Main Quest
             const nextMainQuestIndex = updatedQuests.findIndex((q, i) => i > gameState.currentScenarioIndex && q.kategori === 'Main Quest');
-            if (nextMainQuestIndex !== -1) {
-              updatedQuests[nextMainQuestIndex] = { ...updatedQuests[nextMainQuestIndex], status: 'available' };
-            } else {
-              // ALL MAIN QUESTS COMPLETED
-              result.status_kota = "Tamat";
-            }
+            if (nextMainQuestIndex !== -1) updatedQuests[nextMainQuestIndex] = { ...updatedQuests[nextMainQuestIndex], status: 'available' };
+            else result.status_kota = "Tamat";
           }
-}
+        }
       }
 
       const newState = {
@@ -422,80 +265,28 @@ export default function App() {
       
       setGameState(newState);
 
-      // Add evaluation and narrative to log
-      const evalLog: StoryLog = {
-        id: Date.now().toString() + '-eval',
-        type: 'evaluation',
-        content: '',
-        evaluation: result
-      };
-
-      const narrativeLog: StoryLog = {
-        id: Date.now().toString() + '-narrative',
-        type: 'narrative',
-        content: result.narasi_rpg.cerita_konsekuensi,
-      };
-
+      const evalLog: StoryLog = { id: Date.now().toString() + '-eval', type: 'evaluation', content: '', evaluation: result };
+      const narrativeLog: StoryLog = { id: Date.now().toString() + '-narrative', type: 'narrative', content: result.narasi_rpg.cerita_konsekuensi };
       const finalLogs = [...newLogsWithAction, evalLog, narrativeLog];
-      setLogs(finalLogs);
       
-      // Save to Firebase asynchronously
+      setLogs(finalLogs);
       saveToFirebase(newState, finalLogs);
+      setMissionResult(result);
 
     } catch (error: any) {
-      console.error(error);
-      const errorLog: StoryLog = {
-        id: Date.now().toString() + '-error',
-        type: 'narrative',
-        content: error?.message || "Terjadi kesalahan jaringan atau API. Silakan coba lagi.",
-      };
-      setLogs(prev => [...prev, errorLog]);
+      setLogs(prev => [...prev, { id: Date.now().toString() + '-error', type: 'narrative', content: error?.message || "Terjadi kesalahan API." }]);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleNextScenario = () => {
-    // Find next available Main Quest
-    const nextIndex = gameState.quests.findIndex((q, i) => i > gameState.currentScenarioIndex && q.kategori === 'Main Quest');
-    
-    if (nextIndex === -1 || nextIndex >= gameState.quests.length) {
-      // Completed all main scenarios
-      setGameState(prev => {
-        const newState = { ...prev, status_kota: "Tamat" };
-        const endLog: StoryLog = {
-          id: Date.now().toString() + '-end',
-          type: 'narrative',
-          content: "Selamat! Kamu telah menyelesaikan semua perjalanan sosiologi utama. Masyarakat telah mencapai harmoni.",
-        };
-        const newLogs = [...logs, endLog];
-        setLogs(newLogs);
-        saveToFirebase(newState, newLogs);
-        return newState;
-      });
-      return;
-    }
-    
-    handleStartQuest(gameState.quests[nextIndex].id);
   };
 
   const handleBuyFood = () => {
     if (gameState.uang_qris >= 15000 && gameState.energi < 100) {
       audioEngine.playPositive();
       setGameState(prev => {
-        const newState = {
-          ...prev,
-          uang_qris: prev.uang_qris - 15000,
-          energi: Math.min(100, prev.energi + 20)
-        };
-        const actionLog: StoryLog = {
-          id: Date.now().toString() + '-buyfood',
-          type: 'narrative',
-          content: 'Kamu membeli makanan untuk memulihkan energi (-Rp 15.000, +20 Energi).'
-        };
-        const newLogs = [...logs, actionLog];
-        setLogs(newLogs);
-        saveToFirebase(newState, newLogs);
+        const newState = { ...prev, uang_qris: prev.uang_qris - 15000, energi: Math.min(100, prev.energi + 20) };
+        const newLogs = [...logs, { id: Date.now().toString() + '-buy', type: 'narrative', content: 'Membeli makanan (-Rp 15.000, +20 Energi).' } as StoryLog];
+        setLogs(newLogs); saveToFirebase(newState, newLogs);
         return newState;
       });
     }
@@ -506,314 +297,163 @@ export default function App() {
       audioEngine.playPositive();
       const earned = Math.floor(Math.random() * (50000 - 10000 + 1)) + 10000;
       setGameState(prev => {
-        const newState = {
-          ...prev,
-          energi: prev.energi - 10,
-          uang_qris: prev.uang_qris + earned
-        };
-        const actionLog: StoryLog = {
-          id: Date.now().toString() + '-writearticle',
-          type: 'narrative',
-          content: `Kamu meluangkan waktu menulis artikel opini di web sosiologimembumi.my.id. Artikelmu dibaca banyak orang! (-10 Energi, +Rp ${earned.toLocaleString('id-ID')}).`
-        };
-        const newLogs = [...logs, actionLog];
-        setLogs(newLogs);
-        saveToFirebase(newState, newLogs);
+        const newState = { ...prev, energi: prev.energi - 10, uang_qris: prev.uang_qris + earned };
+        const newLogs = [...logs, { id: Date.now().toString() + '-write', type: 'narrative', content: `Menulis artikel Sosiologi (-10 Energi, +Rp ${earned.toLocaleString('id-ID')}).` } as StoryLog];
+        setLogs(newLogs); saveToFirebase(newState, newLogs);
         return newState;
       });
     }
   };
 
   const handleStartQuest = (questId: number) => {
+    setShowAyatHint(false);
     const questIndex = gameState.quests.findIndex(q => q.id === questId);
     if (questIndex === -1) return;
     const quest = gameState.quests[questIndex];
+    if (gameState.currentScenarioIndex === questIndex && gameState.status_kota === "Waspada") { setIsSideQuestsOpen(false); return; }
+    if (gameState.energi < (quest.cost_energi || 0)) { alert("Energi tidak cukup!"); return; }
     
-    // Check if resuming active quest
-    if (gameState.currentScenarioIndex === questIndex && gameState.status_kota === "Waspada") {
-      setIsSideQuestsOpen(false);
-      return;
-    }
-
-    if (gameState.energi < (quest.cost_energi || 0)) {
-      alert("Energi tidak cukup!");
-      return;
-    }
-
     setAnimationClass('animate-in fade-in duration-1000');
     setTimeout(() => setAnimationClass(''), 1000);
-
+    
     setGameState(prev => {
       let fullContext = `[${quest.lokasi}] ${quest.deskripsi}`;
-      if (quest.ayat_arab && quest.ayat_terjemahan) {
-        fullContext += `\n\n**Ayat Rujukan (${quest.ayat_rujukan}):**\n${quest.ayat_arab}\n*"${quest.ayat_terjemahan}"*`;
-      }
-
-      const newState = {
-        ...prev,
-        energi: prev.energi - (quest.cost_energi || 0),
-        currentScenarioIndex: questIndex,
-        status_kota: "Waspada",
-        locationContext: fullContext
-      };
-      
-      const newLog: StoryLog = {
-        id: Date.now().toString() + '-narrative',
-        type: 'narrative',
-        content: `**MEMULAI MISI: ${quest.judul_konflik}**\n\n${fullContext}`,
-      };
-      
-      const newLogs = [...logs, newLog];
-      setLogs(newLogs);
-      saveToFirebase(newState, newLogs);
-      
+      if (quest.ayat_arab && quest.ayat_terjemahan) fullContext += `\n\n**Ayat Rujukan (${quest.ayat_rujukan}):**\n${quest.ayat_arab}\n*"${quest.ayat_terjemahan}"*`;
+      const newState = { ...prev, energi: prev.energi - (quest.cost_energi || 0), currentScenarioIndex: questIndex, status_kota: "Waspada", locationContext: fullContext };
+      const newLogs = [...logs, { id: Date.now().toString() + '-start', type: 'narrative', content: `**MEMULAI MISI: ${quest.judul_konflik}**\n\n${fullContext}` } as StoryLog];
+      setLogs(newLogs); saveToFirebase(newState, newLogs);
       return newState;
     });
-    setIsSideQuestsOpen(false); // Close QuestBoard
+    setIsSideQuestsOpen(false); 
   };
 
   const handleGenerateAIQuest = async () => {
     try {
-      const response = await fetch('/api/gemini/generate-quest', {
-        method: 'POST'
-      });
-      if (!response.ok) throw new Error('Gagal memuat misi baru');
-      
+      const response = await fetch('/api/gemini/generate-quest', { method: 'POST' });
+      if (!response.ok) throw new Error('Gagal memuat misi');
       const newQuest = await response.json();
-      
-      setGameState(prev => {
-        const newState = {
-          ...prev,
-          quests: [...prev.quests, newQuest]
-        };
-        saveToFirebase(newState, logs);
-        return newState;
-      });
-    } catch (err) {
-      console.error(err);
-      alert('Gagal membuat misi baru. Coba lagi.');
-    }
+      setGameState(prev => { const newState = { ...prev, quests: [...prev.quests, newQuest] }; saveToFirebase(newState, logs); return newState; });
+    } catch (err) { alert('Gagal membuat misi baru.'); }
   };
 
-  if (!user) {
-    return <LandingPage />;
-  }
-
-  if (userProfile?.role === 'ADMIN') {
-    return <DashboardGuru isOpen={true} onClose={() => {}} />;
-  }
+  if (!user) return <LandingPage />;
+  if (userProfile?.role === 'ADMIN') return <DashboardGuru isOpen={true} onClose={() => {}} />;
 
   const isAtBasecamp = logs.length <= 1 && gameState.status_kota === 'Aman' && gameState.currentScenarioIndex === 0;
   const activeQuest = gameState.quests[gameState.currentScenarioIndex];
+  const isIdle = gameState.status_kota === 'Aman' || gameState.status_kota === 'Harmonis';
 
   return (
-    <div className={`flex flex-col h-screen ${getAppBackgroundClass(gameState.status_kota)} transition-colors duration-1000 ease-in-out text-slate-200 overflow-hidden font-sans relative ${animationClass}`}>
-      <StatusBar 
+    <div className={`flex flex-col h-screen ${getAppBackgroundClass(gameState.status_kota)} text-slate-200 overflow-hidden font-sans relative ${animationClass}`}>
+      
+      {/* 1. TOP HUD SELALU ADA */}
+      <TopHUD 
         state={gameState} 
-        onToggleProfile={() => setIsArchiveOpen(!isArchiveOpen)} 
-        onToggleDashboard={() => setIsDashboardOpen(!isDashboardOpen)}
-        onToggleSideQuests={() => setIsSideQuestsOpen(!isSideQuestsOpen)}
-        onToggleAdmin={() => setIsDashboardGuruOpen(!isDashboardGuruOpen)}
-        onToggleChat={() => setIsChatOpen(!isChatOpen)}
-        onToggleTahfidz={() => setIsTahfidzOpen(true)}
-        user={user}
-        userProfile={userProfile}
+        userProfile={userProfile} 
+        onOpenProfile={() => setIsArchiveOpen(true)}
+        onOpenAdmin={() => setIsDashboardGuruOpen(true)}
       />
 
       {isAtBasecamp ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-6 animate-in zoom-in duration-700 relative overflow-hidden">
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
+        <div className="flex-1 flex flex-col items-center justify-center p-6 pt-20 animate-in zoom-in duration-700 relative z-10">
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 pointer-events-none"></div>
           <div className="bg-slate-900/80 border-2 border-emerald-500/50 p-8 rounded-3xl shadow-[0_0_50px_rgba(16,185,129,0.15)] max-w-2xl w-full text-center z-10 backdrop-blur-md">
-            <div className="w-24 h-24 bg-emerald-950 border-4 border-emerald-500 rounded-full mx-auto mb-6 flex items-center justify-center text-4xl shadow-[0_0_20px_rgba(16,185,129,0.5)]">
-              🏕️
-            </div>
-            <h2 className="text-3xl font-bold text-white mb-2 uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
-              Basecamp Kafilah
+            <h2 className="text-3xl font-bold text-white mb-8 uppercase tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">
+              Persiapan Petualangan
             </h2>
-            <p className="text-slate-400 mb-8 text-sm leading-relaxed">
-              Selamat datang, Sosiolog Muda! Dunia sedang menanti solusi darimu. 
-              Pilih misimu, lafalkan ayatnya, dan temukan kearifan budaya Nusantara di setiap langkah.
-            </p>
-            
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <span className="text-xl mb-2 block">🌟</span>
-                <div className="text-xs text-slate-500 uppercase font-bold">Total Capaian</div>
-                <div className="text-lg font-bold text-emerald-400">Level {gameState.currentScenarioIndex + 1}</div>
-              </div>
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <span className="text-xl mb-2 block">🎒</span>
-                <div className="text-xs text-slate-500 uppercase font-bold">Modal Perjalanan</div>
-                <div className="text-lg font-bold text-amber-400">Rp {gameState.uang_qris.toLocaleString('id-ID')}</div>
-              </div>
-            </div>
-
             <button
               onClick={() => handleStartQuest(gameState.quests[0].id)}
-              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 mb-4"
+              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105"
             >
-              🚀 Mulai Petualangan
-            </button>
-            <button
-              onClick={() => setIsSideQuestsOpen(true)}
-              className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all uppercase tracking-widest flex items-center justify-center gap-3 text-sm"
-            >
-              🗺️ Buka Peta Petualangan
-            </button>
-            <button
-              onClick={handleResetData}
-              className="w-full py-3 mt-4 bg-slate-800 hover:bg-red-900/50 text-slate-400 hover:text-red-400 font-bold rounded-xl transition-all uppercase tracking-widest flex items-center justify-center gap-3 text-xs border border-transparent hover:border-red-900"
-            >
-              🔄 Hapus Save Data & Ulang dari Awal
+               Mulai Petualangan Pertama
             </button>
           </div>
         </div>
       ) : (
-        <>
-          <StoryLogView logs={logs} loading={loading} />
-
-      {gameState.status_kota === 'Tamat' && (
-        <CertificateView 
-          user={user} 
-          userProfile={userProfile} 
-          gameState={gameState} 
-          onReset={() => {
-            localStorage.removeItem('alkahfi_save_state');
-            window.location.reload();
-          }} 
-        />
-      )}
-
+        <div className="flex-1 relative flex flex-col pt-20 overflow-hidden">
           
-          {gameState.status_kota === 'Aman' || gameState.status_kota === 'Harmonis' ? (
-            <div className="p-4 md:p-6 bg-slate-900 border-t border-slate-800 animate-in slide-in-from-bottom-8 flex flex-col items-center gap-4">
-              <p className="text-amber-400 font-bold uppercase tracking-widest text-center text-sm md:text-base">
-                Sambil transit, kamu bisa mengecek inventaris, Peta, atau Murojaah.
-              </p>
-              
-              <div className="flex flex-col md:flex-row gap-4 w-full max-w-2xl">
-                <button
-                  onClick={() => handleBuyFood()}
-                  disabled={gameState.uang_qris < 15000 || gameState.energi >= 100}
-                  className="flex-1 p-4 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 rounded-xl flex flex-col items-center justify-center gap-2 transition-colors"
-                >
-                  <div className="text-emerald-400 font-bold">Beli Makanan (Rp 15.000)</div>
-                  <div className="text-xs text-slate-400">+20 Energi</div>
-                </button>
-                <button
-                  onClick={() => handleWriteArticle()}
-                  disabled={gameState.energi < 10}
-                  className="flex-1 p-4 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed border border-slate-700 rounded-xl flex flex-col items-center justify-center gap-2 transition-colors"
-                >
-                  <div className="text-cyan-400 font-bold">Tulis Artikel</div>
-                  <div className="text-xs text-slate-400">-10 Energi, +Rp Acak</div>
-                </button>
-                <button
-                  onClick={() => setIsTahfidzOpen(true)}
-                  disabled={gameState.energi < 5}
-                  className="flex-1 p-4 bg-amber-900/50 hover:bg-amber-800/50 disabled:opacity-50 disabled:cursor-not-allowed border border-amber-700/50 rounded-xl flex flex-col items-center justify-center gap-2 transition-colors shadow-[inset_0_0_15px_rgba(245,158,11,0.1)]"
-                >
-                  <div className="text-amber-400 font-bold">Murojaah (Ayat)</div>
-                  <div className="text-xs text-amber-200/50">-5 Energi, +15 Hifdz</div>
+          {/* 2. AREA TENGAH (SCROLLABLE LOGS) */}
+          <div className="flex-1 overflow-y-auto pb-48 relative">
+            <StoryLogView logs={logs} loading={loading} />
+            {gameState.status_kota === 'Tamat' && (
+              <CertificateView user={user} userProfile={userProfile} gameState={gameState} onReset={handleResetData} />
+            )}
+          </div>
+
+          {/* 3. AREA BAWAH (DOCK & INPUT ACTION) */}
+          <div className="absolute bottom-0 left-0 w-full flex flex-col pointer-events-none z-30">
+            
+            {/* Navigasi Melayang (Selalu bisa diakses asalkan belum tamat) */}
+            {gameState.status_kota !== 'Tamat' && (
+              <div className="mb-4">
+                <BottomDock 
+                  onOpenMap={() => setIsSideQuestsOpen(true)}
+                  onOpenInventory={() => setIsDashboardOpen(true)}
+                  onOpenTahfidz={() => setIsTahfidzOpen(true)}
+                  onOpenChat={() => setIsChatOpen(true)}
+                />
+              </div>
+            )}
+
+            {/* Jika sedang IDLE (Aman): Tampilkan Menu Transit */}
+            {isIdle && gameState.status_kota !== 'Tamat' && (
+              <div className="p-4 bg-slate-950/95 border-t border-slate-800 shadow-[0_-10px_30px_rgba(0,0,0,0.5)] pointer-events-auto flex flex-col gap-3">
+                <div className="flex gap-4 w-full max-w-2xl mx-auto">
+                  <button onClick={handleBuyFood} disabled={gameState.uang_qris < 15000 || gameState.energi >= 100} className="flex-1 p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-emerald-400 font-bold text-xs uppercase tracking-widest transition-colors disabled:opacity-50">
+                    Makan (15k)
+                  </button>
+                  <button onClick={handleWriteArticle} disabled={gameState.energi < 10} className="flex-1 p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-cyan-400 font-bold text-xs uppercase tracking-widest transition-colors disabled:opacity-50">
+                    Tulis Artikel
+                  </button>
+                </div>
+                <button onClick={() => setIsSideQuestsOpen(true)} className="w-full max-w-2xl mx-auto py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl uppercase tracking-widest text-sm flex items-center justify-center gap-2 transition-all">
+                  <MapIcon size={18} /> Buka Peta Untuk Lanjut
                 </button>
               </div>
+            )}
 
-              <button
-                onClick={() => setIsSideQuestsOpen(true)}
-                className="w-full max-w-2xl py-4 mt-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg shadow-emerald-900/20 transition-all uppercase tracking-widest flex items-center justify-center gap-3 text-sm"
-              >
-                🚀 Lanjutkan Petualangan
-              </button>
-              {gameState.energi <= 20 && (
-                <p className="text-red-400 text-xs text-center font-mono mt-2">Energi tidak cukup untuk melanjutkan perjalanan (Minimal &gt; 20).</p>
-              )}
-            </div>
-          ) : gameState.status_kota === 'Tamat' ? (
-            null
+            {/* Jika sedang KRISIS (Waspada): Tampilkan Form Input (Esai/Suara) */}
+            {!isIdle && gameState.status_kota !== 'Tamat' && (
+              <div className="bg-slate-900/95 backdrop-blur-md border-t border-slate-800 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] pointer-events-auto">
+                {activeQuest && activeQuest.ayat_arab && (
+                  <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+                    <p className="text-xs text-slate-400">Referensi: <strong>{activeQuest.ayat_rujukan}</strong></p>
+                    <button onClick={() => setShowAyatHint(!showAyatHint)} className="text-[10px] uppercase text-indigo-400 font-bold hover:text-indigo-300">
+                      {showAyatHint ? 'Sembunyikan' : 'Lihat Ayat'}
+                    </button>
+                  </div>
+                )}
+                {showAyatHint && activeQuest?.ayat_arab && (
+                  <div className="p-4 bg-slate-900 border-b border-slate-800 animate-in fade-in slide-in-from-bottom-2">
+                    <p className="text-right font-arabic text-xl leading-loose text-emerald-300" dir="rtl">{activeQuest.ayat_arab}</p>
+                    <p className="text-[10px] italic text-slate-400 mt-2">"{activeQuest.ayat_terjemahan}"</p>
+                  </div>
+                )}
+                <ActionInput onActionSubmit={handleActionSubmit} disabled={loading} locationContext={gameState.locationContext} />
+              </div>
+            )}
+          </div>
 
-          ) : (
-            <div className="flex flex-col bg-slate-900 border-t border-slate-800">
-              {activeQuest && activeQuest.ayat_arab && (
-                <div className="px-4 py-3 bg-emerald-950/20 border-b border-emerald-900/30 flex flex-col gap-2 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                    <BookOpen size={64} />
-                  </div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold bg-emerald-950/50 px-2 py-1 rounded border border-emerald-900/50">Ayat Rujukan Misi</span>
-                    <span className="text-xs text-emerald-200 font-medium">{activeQuest.ayat_rujukan}</span>
-                  </div>
-                  <p className="text-right font-arabic text-xl md:text-2xl leading-loose text-emerald-100" dir="rtl">
-                    {activeQuest.ayat_arab}
-                  </p>
-                  <p className="text-xs italic text-emerald-200/80 leading-relaxed border-l-2 border-emerald-800 pl-3 mt-1">
-                    "{activeQuest.ayat_terjemahan}"
-                  </p>
-                </div>
-              )}
-              <ActionInput onActionSubmit={handleActionSubmit} disabled={loading} locationContext={gameState.locationContext} />
-            </div>
-          )}
-        </>
+        </div>
       )}
       
-      <ProfileModal 
-        isOpen={isArchiveOpen} 
-        onClose={() => setIsArchiveOpen(false)} 
-        logs={logs} 
-        user={user}
-        userProfile={userProfile}
-        gameState={gameState}
-      />
-
-      <Dashboard
-        isOpen={isDashboardOpen}
-        onClose={() => setIsDashboardOpen(false)}
-        gameState={gameState}
-        onEquip={handleEquip}
-        onBuy={handleBuy}
-        onResetData={handleResetData}
-      />
-
-      <QuestBoard
-        isOpen={isSideQuestsOpen}
-        onClose={() => setIsSideQuestsOpen(false)}
-        gameState={gameState}
-        onStartQuest={handleStartQuest}
-        onGenerateAIQuest={handleGenerateAIQuest}
-      />
-
-      <DashboardGuru 
-        isOpen={isDashboardGuruOpen} 
-        onClose={() => setIsDashboardGuruOpen(false)} 
-      />
-
-      <ChatWidget 
-        isOpen={isChatOpen} 
-        onClose={() => setIsChatOpen(false)} 
-      />
-
-      <MiniGameTahfidz 
-        isOpen={isTahfidzOpen}
-        onClose={() => setIsTahfidzOpen(false)}
-        gameState={gameState}
-        onComplete={handleCompleteTahfidz}
-      />
+      {/* POPUPS & OVERLAYS */}
+      {showAvatarSelection && <AvatarSelection onSelect={handleSelectAvatar} />}
+      {showWelcomePopup && <WelcomePopup gameState={gameState} onContinue={handleCloseWelcome} />}
+      {missionResult && <MissionResultPopup evaluation={missionResult} gameState={gameState} onClose={() => setMissionResult(null)} />}
+      
+      <ProfileModal isOpen={isArchiveOpen} onClose={() => setIsArchiveOpen(false)} logs={logs} user={user} userProfile={userProfile} gameState={gameState} />
+      <Dashboard isOpen={isDashboardOpen} onClose={() => setIsDashboardOpen(false)} gameState={gameState} onEquip={handleEquip} onBuy={handleBuy} onResetData={handleResetData} />
+      <QuestBoard isOpen={isSideQuestsOpen} onClose={() => setIsSideQuestsOpen(false)} gameState={gameState} onStartQuest={handleStartQuest} onGenerateAIQuest={handleGenerateAIQuest} />
+      <ChatWidget isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+      <MiniGameTahfidz isOpen={isTahfidzOpen} onClose={() => setIsTahfidzOpen(false)} gameState={gameState} onComplete={handleCompleteTahfidz} />
 
       {saranIlahi && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in duration-300">
-          <div className="bg-amber-950 border-2 border-amber-500 rounded-2xl max-w-lg w-full p-8 shadow-[0_0_50px_rgba(245,158,11,0.3)] flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-amber-500/20 rounded-full flex items-center justify-center mb-6 border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.5)]">
-              <span className="text-3xl">✨</span>
-            </div>
-            <h2 className="text-2xl font-bold text-amber-400 mb-2 uppercase tracking-widest">Saran dari Dosen Kehidupan</h2>
-            <div className="w-12 h-1 bg-amber-500/50 rounded mb-6"></div>
-            <p className="text-lg text-amber-100 mb-8 leading-relaxed font-medium">"{saranIlahi}"</p>
-            <button 
-              onClick={() => setSaranIlahi(null)}
-              className="px-8 py-3 bg-amber-600 hover:bg-amber-500 text-amber-950 font-bold rounded-xl uppercase tracking-widest transition-colors w-full md:w-auto"
-            >
-              Saya Mengerti
-            </button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-amber-950 border-2 border-amber-500 rounded-2xl max-w-lg w-full p-8 flex flex-col items-center text-center">
+            <h2 className="text-2xl font-bold text-amber-400 mb-4 uppercase">Saran Dosen</h2>
+            <p className="text-lg text-amber-100 mb-8">"{saranIlahi}"</p>
+            <button onClick={() => setSaranIlahi(null)} className="px-8 py-3 bg-amber-600 text-white font-bold rounded-xl uppercase">Mengerti</button>
           </div>
         </div>
       )}

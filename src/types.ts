@@ -18,6 +18,9 @@ export interface GameState {
   equipment: Equipment;
   currentScenarioIndex: number;
   quests: Scenario[];
+  avatarId?: string;
+  playerName?: string;
+  level?: number;
 }
 
 export interface EvaluationResult {
@@ -58,6 +61,7 @@ export interface UserProfile {
   photoURL: string;
   role: 'ADMIN' | 'STUDENT';
   lastActiveAt: any;
+  avatarId?: string;
 }
 
 export interface StoryLog {

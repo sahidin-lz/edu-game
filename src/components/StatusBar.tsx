@@ -1,5 +1,7 @@
 import React from 'react';
 import { GameState } from '../types';
+import { AVATARS, getCustomAvatarUrl } from '../data/avatars';
+
 import { Heart, Wallet, BookOpen, Brain, Users, AlertTriangle,  Target, ShieldAlert, Globe, Book } from 'lucide-react';
 import { AuthButton } from './AuthButton';
 import { LiveApiButton } from './LiveApiButton';
@@ -17,11 +19,21 @@ interface Props {
 }
 
 export function StatusBar({ state, onToggleProfile, onToggleDashboard, onToggleSideQuests, onToggleAdmin, onToggleChat, onToggleTahfidz, user, userProfile }: Props) {
+  const isCustom = state.avatarId?.startsWith('custom-');
+  const customSeed = isCustom ? state.avatarId?.replace('custom-', '') : '';
+  const customImage = isCustom ? getCustomAvatarUrl(customSeed!) : '';
+  const avatar = isCustom ? { name: userProfile?.displayName || 'Siswa', image: customImage } : (AVATARS.find(a => a.id === state.avatarId) || AVATARS[0]);
+
   return (
     <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-700 sticky top-0 z-10 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.5)]">
       <div className="h-16 flex items-center justify-between px-4 md:px-8 border-b border-slate-800/50">
         <div className="flex items-center gap-4">
-          <div className="w-8 h-8 bg-emerald-500 rounded flex items-center justify-center font-bold text-slate-950 shadow-[0_0_10px_rgba(16,185,129,0.5)]">AK</div>
+          
+          <div className="relative group cursor-pointer" onClick={onToggleProfile}>
+            <img src={avatar.image} alt="Avatar" className="w-10 h-10 rounded-full border-2 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] object-cover bg-slate-800" />
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-slate-900"></div>
+          </div>
+
           <h1 className="text-sm md:text-xl font-bold tracking-tight text-white uppercase">AL-KAHFI <span className="text-emerald-500 hidden md:inline">// SOSIOLOGI MEMBUMI</span></h1>
         </div>
         <div className="flex gap-2 md:gap-4 items-center overflow-x-auto pb-1 md:pb-0 scrollbar-none">

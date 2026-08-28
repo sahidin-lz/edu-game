@@ -10,6 +10,31 @@ dotenv.config();
 const { app, getWss } = expressWs(express());
 const PORT = 3000;
 
+function extractJson(text: string) {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  const arrStart = text.indexOf('[');
+  const arrEnd = text.lastIndexOf(']');
+  
+  let startIndex = -1;
+  let endIndex = -1;
+  
+  if (start !== -1 && end !== -1 && (arrStart === -1 || start < arrStart)) {
+      startIndex = start;
+      endIndex = end;
+  } else if (arrStart !== -1 && arrEnd !== -1) {
+      startIndex = arrStart;
+      endIndex = arrEnd;
+  }
+  
+  if (startIndex !== -1 && endIndex !== -1 && endIndex >= startIndex) {
+    return JSON.parse(text.substring(startIndex, endIndex + 1));
+  }
+  
+  return JSON.parse(text.replace(/\s*```json\s*/g, '').replace(/\s*```\s*/g, '').trim());
+}
+
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -173,7 +198,7 @@ app.post("/api/action", async (req, res) => {
       throw new Error("No response from AI");
     }
 
-    const result = JSON.parse(responseText);
+    const result = extractJson(responseText);
     res.json(result);
   } catch (error: any) {
     console.error("Error calling Gemini API:", error);
@@ -224,7 +249,7 @@ Tugas Anda:
     const responseText = response.text;
     if (!responseText) throw new Error("No response from AI");
 
-    const result = JSON.parse(responseText);
+    const result = extractJson(responseText);
     res.json(result);
   } catch (error: any) {
     console.error("Error evaluating tahfidz audio:", error);
@@ -393,8 +418,8 @@ Hasilkan HANYA format JSON murni:
 
     if (!response.text) throw new Error("No response text");
 
-    const jsonStr = response.text.replace(/```json\n?/, '').replace(/```\n?/, '');
-    const quest = JSON.parse(jsonStr);
+    
+    const quest = extractJson(response.text);
 
     res.json(quest);
   } catch (error) {
