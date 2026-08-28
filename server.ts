@@ -13,14 +13,61 @@ const PORT = 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// --- RATE LIMITER ---
+const rateLimitMap = new Map<string, { count: number, resetTime: number }>();
+function rateLimiter(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
+  const now = Date.now();
+  const windowMs = 60 * 1000; // 1 minute
+  const maxRequests = 30; // Max 30 requests per minute
+
+  if (!rateLimitMap.has(ip)) {
+    rateLimitMap.set(ip, { count: 1, resetTime: now + windowMs });
+    return next();
+  }
+
+  const limitData = rateLimitMap.get(ip)!;
+  if (now > limitData.resetTime) {
+    limitData.count = 1;
+    limitData.resetTime = now + windowMs;
+    return next();
+  }
+
+  if (limitData.count >= maxRequests) {
+    return res.status(429).json({ error: "Terlalu banyak permintaan. Silakan coba lagi sebentar lagi." });
+  }
+
+  limitData.count++;
+  next();
+}
+
+app.use('/api', rateLimiter);
+
+// --- EXPONENTIAL BACKOFF WRAPPER ---
+async function fetchWithRetry<T>(apiCall: () => Promise<T>, maxRetries = 3): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await apiCall();
+    } catch (error: any) {
+      if (i === maxRetries - 1) throw error; // Rethrow on last attempt
+      if (error?.status === 429 || error?.status >= 500 || error?.message?.includes('fetch failed') || error?.message?.includes('503')) {
+        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000; // Exponential backoff with jitter
+        console.warn(`[RETRY] API call failed, retrying in ${Math.round(delay)}ms... (Attempt ${i + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw error; // Rethrow non-retryable errors immediately
+      }
+    }
+  }
+  throw new Error("Max retries reached");
+}
+
 // Set up Gemini API client
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const SYSTEM_INSTRUCTION = `Anda adalah "Dosen Kehidupan", sebuah AI Game Master dan Evaluator Utama untuk AL-KAHFI (Artificial Learning – Kepemimpinan, Akhlak, Hafalan, Fenomena, & Interaksi Sosiologi). AL-KAHFI adalah game simulasi kehidupan (Life Simulation RPG) dan purwarupa eksperimen Dilema Sosial (Social Dilemma) berbasis web bagi siswa SMA dan Santri.
-
 ATURAN ANTI-CURANG (DETEKSI PLAGIASI & AI):
 Analisis gaya bahasa input pemain. Jika teks terlalu kaku, berformat poin-poin sempurna layaknya hasil generate AI (ChatGPT), atau persis seperti copy-paste artikel Wikipedia/Buku Teks tanpa bahasa natural manusia, maka tandai indikasi_curang: true.
-
 Jika indikasi_curang: true, maka:
 - skor_sosiologi dan skor_akhlak WAJIB 0.
 - saran_guru: 'Kamu hanya mengulang teks kaku tanpa pemahaman batin. Masyarakat butuh ketulusan, bukan sekadar teori yang dihafal.'
@@ -37,7 +84,6 @@ Setiap kali pemain bertindak, Anda wajib memberikan skor (0-100) pada dua parame
    - 80-100: Sangat Akurat. Pemain secara eksplisit maupun implisit mempraktikkan kerangka konsep Sosiologi yang tepat untuk memecahkan fenomena (Contoh: Menerapkan pendekatan "Mediasi" atau "Arbitrasi" untuk meredam konflik; menginisiasi "Asimilasi" atau "Akomodasi" kultural; mengenali "Partikularisme/Etnosentrisme" dan mencegahnya).
    - 40-79: Logis namun dangkal. Pemain menyelesaikan masalah namun tidak menggunakan pendekatan struktural sosiologis yang kuat.
    - 0-39: Destruktif. Keputusan pemain irasional, memicu disintegrasi sosial, bersikap diskriminatif, atau gagal membaca realitas struktur sosial.
-
 4. Skor Akhlak & Karakter (Hifdz):
    - 80-100: Pemimpin Islami. Pemain menyertakan dalil/nilai Al-Qur'an yang sangat relevan dengan masalah (Contoh: Menerapkan prinsip Tabayyun/Q.S Al-Hujurat: 6 saat menghadapi hoaks; prinsip Lita'arafu/Q.S Al-Hujurat: 13 saat ada isu SARA; Islah untuk mendamaikan; berlaku adil sesuai Q.S Al-Ma'idah: 8).
    - 40-79: Niat baik secara umum, namun tidak merujuk pada nilai agama yang spesifik atau kurang adab dalam berargumen.
@@ -102,21 +148,25 @@ FORMAT OUTPUT JSON WAJIB:
 app.post("/api/action", async (req, res) => {
   try {
     const { state, action, inputType } = req.body;
-
-    const prompt = `- Lokasi & Situasi: ${state.locationContext || 'Stasiun Pasar Senen, bersiap untuk Rihlah pengabdian.'}
+    
+    const prompt = `
+- Lokasi & Situasi: ${state.locationContext || 'Stasiun Pasar Senen, bersiap untuk Rihlah pengabdian.'}
 - Ketegangan Sosial Kota: ${state.ketegangan_sosial}%
 - Uang & Energi Pemain: Uang Rp${state.uang_qris}, Energi ${state.energi}/100
 - Tipe Input: ${inputType}
-- Tindakan/Argumen Pemain: ${action}`;
+- Tindakan/Argumen Pemain: ${action}
+`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: prompt,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        responseMimeType: "application/json",
-      },
-    });
+    const response = await fetchWithRetry(() => 
+      ai.models.generateContent({
+        model: "gemini-3.1-flash-lite",
+        contents: prompt,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          responseMimeType: "application/json",
+        },
+      })
+    );
 
     const responseText = response.text;
     if (!responseText) {
@@ -134,7 +184,7 @@ app.post("/api/action", async (req, res) => {
 app.post("/api/tahfidz", async (req, res) => {
   try {
     const { audioData, mimeType, targetVerse } = req.body;
-
+    
     const prompt = `Anda adalah penguji tahfidz. Dengarkan audio bacaan siswa berikut ini. Target bacaan adalah ${targetVerse}.
 Tugas Anda:
 1. Evaluasi apakah bacaan sesuai dengan target.
@@ -148,26 +198,28 @@ Tugas Anda:
   "transcription": "Apa yang Anda dengar"
 }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: prompt },
-            {
-              inlineData: {
-                data: audioData,
-                mimeType: mimeType || 'audio/webm',
+    const response = await fetchWithRetry(() => 
+      ai.models.generateContent({
+        model: "gemini-3.1-flash-lite",
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  data: audioData,
+                  mimeType: mimeType || 'audio/webm',
+                }
               }
-            }
-          ]
-        }
-      ],
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
+            ]
+          }
+        ],
+        config: {
+          responseMimeType: "application/json",
+        },
+      })
+    );
 
     const responseText = response.text;
     if (!responseText) throw new Error("No response from AI");
@@ -189,10 +241,12 @@ app.post("/api/music", async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     
-    const response = await ai.models.generateContentStream({
-      model: "lyria-3-clip-preview",
-      contents: `Generate a 30-second cinematic, atmospheric RPG soundtrack for the following context: ${prompt}`,
-    });
+    const response = await fetchWithRetry(() => 
+      ai.models.generateContentStream({
+        model: "lyria-3-clip-preview",
+        contents: `Generate a 30-second cinematic, atmospheric RPG soundtrack for the following context: ${prompt}`,
+      })
+    );
 
     for await (const chunk of response) {
       const parts = chunk.candidates?.[0]?.content?.parts;
@@ -224,11 +278,13 @@ app.post("/api/grounding", async (req, res) => {
       tools.push({ type: 'google_search' });
     }
 
-    const interaction = await ai.interactions.create({
-      model: "gemini-3.5-flash",
-      input: query,
-      tools: tools
-    });
+    const interaction = await fetchWithRetry(() => 
+      ai.interactions.create({
+        model: "gemini-3.1-flash-lite",
+        input: query,
+        tools: tools
+      })
+    );
 
     let resultText = "";
     for (const step of interaction.steps) {
@@ -248,12 +304,12 @@ app.post("/api/grounding", async (req, res) => {
 app.ws('/live', async (ws, req) => {
   try {
     const session = await ai.live.connect({
-      model: "gemini-3.1-flash-live-preview",
+      model: "gemini-2.0-flash-exp",
       config: {
         responseModalities: [Modality.AUDIO],
-        systemInstruction: SYSTEM_INSTRUCTION, // use the same instructions
+        systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
         speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
         },
       },
       callbacks: {
@@ -285,7 +341,6 @@ app.ws('/live', async (ws, req) => {
     ws.on('close', () => {
       // Disconnect if session has a method for it, or just let it drop
     });
-
   } catch (error) {
     console.error("Live API connection failed:", error);
     ws.close();
@@ -326,15 +381,18 @@ Hasilkan HANYA format JSON murni:
   "cost_energi": <random integer 10 to 30>
 }`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
+    const response = await fetchWithRetry(() => 
+      ai.models.generateContent({
+        model: "gemini-3.1-flash-lite",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+        },
+      })
+    );
 
     if (!response.text) throw new Error("No response text");
+
     const jsonStr = response.text.replace(/```json\n?/, '').replace(/```\n?/, '');
     const quest = JSON.parse(jsonStr);
 

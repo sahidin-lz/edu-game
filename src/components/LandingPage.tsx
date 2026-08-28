@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogIn, UserPlus, Lock, Mail, GraduationCap, Shield } from 'lucide-react';
+import { LogIn, UserPlus, Lock, Mail, GraduationCap, Shield, Eye, EyeOff } from 'lucide-react';
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 
@@ -7,6 +7,7 @@ export function LandingPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -141,13 +142,20 @@ export function LandingPage() {
                 <Lock size={18} />
               </div>
               <input 
-                type="password" 
+                type={showPassword ? "text" : "password"} 
                 required
                 placeholder="Password (minimal 6 karakter)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 pl-10 pr-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg py-3 pl-10 pr-12 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-300 focus:outline-none"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
 
             <button 

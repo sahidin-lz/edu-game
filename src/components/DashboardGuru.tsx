@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Brain, Heart, AlertTriangle, ScrollText, Activity, ShieldAlert, X, Eye, Ear, Megaphone, Send } from 'lucide-react';
+import { Users, Brain, Heart, AlertTriangle, ScrollText, Activity, ShieldAlert, X, Eye, Ear, Megaphone, Send, Trash2, Download, LogOut } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
-import { collection as firestoreCollection, query as firestoreQuery, onSnapshot as firestoreOnSnapshot } from 'firebase/firestore';
+import { collection as firestoreCollection, query as firestoreQuery, onSnapshot as firestoreOnSnapshot, doc, deleteDoc } from 'firebase/firestore';
 
 interface Props {
   isOpen: boolean;
@@ -30,7 +30,7 @@ export function DashboardGuru({ isOpen, onClose }: Props) {
       const students: any[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
-        if (data.email === 'sahidin30@gmail.com') return; // Skip admin
+        if (currentUser?.email && data.email === currentUser.email) return; // Skip admin (self)
         
         const state = data.gameState || {};
         students.push({
@@ -99,6 +99,39 @@ export function DashboardGuru({ isOpen, onClose }: Props) {
     alert(intercept ? "Mengaktifkan Intervensi Suara..." : "Memulai Penyadapan...");
   };
 
+  const handleDeleteUser = async (id: string, name: string) => {
+    if (window.confirm(`Yakin ingin menghapus data save game untuk siswa: ${name}? Ini akan menghapus semua progres mereka.`)) {
+      try {
+        await deleteDoc(doc(db, "saves", id));
+        alert(`Data ${name} berhasil dihapus.`);
+      } catch (error) {
+        console.error("Gagal menghapus:", error);
+        alert("Gagal menghapus user.");
+      }
+    }
+  };
+
+  const handleDownloadCSV = () => {
+    if (studentList.length === 0) return;
+    
+    // Header
+    let csv = 'Nama Siswa,Level,Sisa Uang (Rp),Energi,Skor Sosiologi (Faham),Skor Akhlak (Hifdz),Status Kota\n';
+    
+    // Data rows
+    studentList.forEach(s => {
+      csv += `"${s.nama}","${s.level}","${s.uang}","${s.energi}","${s.sosiologi}","${s.akhlak}","${s.status}"\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `rekap_siswa_alkahfi_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -115,12 +148,22 @@ export function DashboardGuru({ isOpen, onClose }: Props) {
               <p className="text-xs text-slate-400 font-mono">Real-time Admin Monitor</p>
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={handleDownloadCSV}
+              className="px-3 py-2 bg-emerald-900/50 hover:bg-emerald-800 border border-emerald-700 rounded-lg text-emerald-400 hover:text-white transition-colors flex items-center gap-2 text-sm font-bold uppercase tracking-widest"
+              title="Download Data Siswa (CSV)"
+            >
+              <Download size={16} /> Export CSV
+            </button>
+            <button 
+              onClick={() => auth.signOut()}
+              className="px-3 py-2 bg-red-900/50 hover:bg-red-800 border border-red-700 rounded-lg text-red-400 hover:text-white transition-colors flex items-center gap-2 text-sm font-bold uppercase tracking-widest"
+              title="Keluar / Logout"
+            >
+              <LogOut size={16} /> Logout Admin
+            </button>
+          </div>
         </div>
 
         {/* TABEL REKAP & KONTROL */}
@@ -151,6 +194,7 @@ export function DashboardGuru({ isOpen, onClose }: Props) {
                         <th className="p-3 text-slate-400 uppercase font-bold text-xs tracking-wider">Sisa Bekal</th>
                         <th className="p-3 text-slate-400 uppercase font-bold text-xs tracking-wider text-center">Skor Faham</th>
                         <th className="p-3 text-slate-400 uppercase font-bold text-xs tracking-wider text-center">Skor Hifdz</th>
+                        <th className="p-3 text-slate-400 uppercase font-bold text-xs tracking-wider text-center">Aksi</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -167,6 +211,15 @@ export function DashboardGuru({ isOpen, onClose }: Props) {
                           </td>
                           <td className="p-3 text-center">
                             <span className="bg-amber-900/40 border border-amber-700/50 text-amber-400 px-2 py-1 rounded text-xs">{s.akhlak}</span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => handleDeleteUser(s.id, s.nama)}
+                              className="p-1.5 bg-red-950 hover:bg-red-900 text-red-400 hover:text-red-300 rounded border border-red-900/50 transition-colors tooltip"
+                              title="Hapus Save Siswa"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </td>
                         </tr>
                       ))}

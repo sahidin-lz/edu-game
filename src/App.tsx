@@ -179,8 +179,15 @@ export default function App() {
       if (currentUser) {
         // Logika RBAC (Role-Based Access Control)
         let role = 'STUDENT';
-        if (currentUser.email === 'sahidin30@gmail.com') {
-          role = 'ADMIN';
+        try {
+          if (currentUser.email) {
+            const adminDoc = await getDoc(doc(db, "admins", currentUser.email));
+            if (adminDoc.exists()) {
+              role = 'ADMIN';
+            }
+          }
+        } catch (e) {
+          console.error("Failed to check admin status", e);
         }
         
         const profile = {
@@ -590,6 +597,10 @@ export default function App() {
 
   if (!user) {
     return <LandingPage />;
+  }
+
+  if (userProfile?.role === 'ADMIN') {
+    return <DashboardGuru isOpen={true} onClose={() => {}} />;
   }
 
   const isAtBasecamp = logs.length <= 1 && gameState.status_kota === 'Aman' && gameState.currentScenarioIndex === 0;
