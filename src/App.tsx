@@ -136,12 +136,17 @@ export default function App() {
       setUser(currentUser);
       if (currentUser) {
         let role = 'STUDENT';
-        try {
-          if (currentUser.email) {
-            const adminDoc = await getDoc(doc(db, "admins", currentUser.email));
-            if (adminDoc.exists()) role = 'ADMIN';
-          }
-        } catch (e) { console.error(e); }
+        const adminEmails = ['sahidin30@gmail.com', 'sahidi30@gmail.com'];
+        if (currentUser.email && adminEmails.includes(currentUser.email.toLowerCase())) {
+          role = 'ADMIN';
+        } else {
+          try {
+            if (currentUser.email) {
+              const adminDoc = await getDoc(doc(db, "admins", currentUser.email));
+              if (adminDoc.exists()) role = 'ADMIN';
+            }
+          } catch (e) { console.error(e); }
+        }
         
         const profile = { uid: currentUser.uid, displayName: currentUser.displayName, email: currentUser.email, photoURL: currentUser.photoURL, role: role, lastActiveAt: serverTimestamp() };
         setUserProfile(profile);
