@@ -6,7 +6,12 @@ import expressWs from "express-ws";
 
 dotenv.config();
 
-const { app, getWss } = expressWs(express());
+const app = express();
+let getWss: any;
+if (!process.env.VERCEL) {
+  const wsInstance = expressWs(app);
+  getWss = wsInstance.getWss;
+}
 const PORT = 3000;
 
 function extractJson(text: string) {
@@ -292,7 +297,7 @@ app.post("/api/grounding", async (req, res) => {
   }
 });
 
-app.ws('/live', async (ws, req) => {
+if ((app as any).ws) (app as any).ws('/live', async (ws, req) => {
   try {
     const session = await ai.live.connect({
       model: "gemini-2.0-flash-exp",
@@ -338,7 +343,7 @@ app.ws('/live', async (ws, req) => {
   }
 });
 
-app.ws('/ws/p2p', (ws, req) => {
+if ((app as any).ws) (app as any).ws('/ws/p2p', (ws, req) => {
   ws.on('message', (msg: string) => {
     try {
       const data = JSON.parse(msg);
