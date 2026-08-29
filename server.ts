@@ -188,7 +188,7 @@ app.post("/api/action", async (req, res) => {
 
     const response = await fetchWithRetry(() => 
       ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
+        model: "gemini-1.5-flash",
         contents: prompt,
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
@@ -229,7 +229,7 @@ Tugas Anda:
 
     const response = await fetchWithRetry(() => 
       ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
+        model: "gemini-1.5-flash",
         contents: [
           {
             role: 'user',
@@ -276,7 +276,7 @@ app.post("/api/grounding", async (req, res) => {
 
     const interaction = await fetchWithRetry(() => 
       ai.interactions.create({
-        model: "gemini-3.1-flash-lite",
+        model: "gemini-1.5-flash",
         input: query,
         tools: tools
       })
@@ -379,7 +379,7 @@ Hasilkan HANYA format JSON murni:
 
     const response = await fetchWithRetry(() => 
       ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
+        model: "gemini-1.5-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",
