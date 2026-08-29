@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import expressWs from "express-ws";
 
@@ -398,6 +397,7 @@ Hasilkan HANYA format JSON murni:
 // Vite middleware for development
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -411,9 +411,13 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+export default app;
