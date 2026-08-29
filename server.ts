@@ -300,7 +300,7 @@ app.post("/api/grounding", async (req, res) => {
 if ((app as any).ws) (app as any).ws('/live', async (ws, req) => {
   try {
     const session = await ai.live.connect({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-1.5-flash",
       config: {
         responseModalities: [Modality.AUDIO],
         systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
