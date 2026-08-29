@@ -225,7 +225,10 @@ export default function App() {
 
     try {
       const response = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: gameState, action: actionText, inputType }) });
-      if (!response.ok) throw new Error('Gagal mendapatkan respon dari Dosen Kehidupan.');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.details || errData.error || 'Gagal mendapatkan respon dari Dosen Kehidupan.');
+      }
       const result: EvaluationResult = await response.json();
 
       if (user) {
